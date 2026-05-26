@@ -38,8 +38,8 @@ function getMonthName(dateStr: string): string {
   return months[m] ?? "";
 }
 
-function getLatestAktivasi(kode: string): AktivasiRecord | undefined {
-  return aktivasiRecords
+function getLatestAktivasi(kode: string, records: AktivasiRecord[]): AktivasiRecord | undefined {
+  return records
     .filter((r) => r.customerKode === kode)
     .sort((a, b) => {
       const da = parseDateDMY(a.tglAktif)?.getTime() ?? 0;
@@ -48,8 +48,8 @@ function getLatestAktivasi(kode: string): AktivasiRecord | undefined {
     })[0];
 }
 
-function getAktivasiHistory(kode: string): AktivasiRecord[] {
-  return aktivasiRecords
+function getAktivasiHistory(kode: string, records: AktivasiRecord[]): AktivasiRecord[] {
+  return records
     .filter((r) => r.customerKode === kode)
     .sort((a, b) => {
       const da = parseDateDMY(a.tglAktif)?.getTime() ?? 0;
@@ -58,8 +58,8 @@ function getAktivasiHistory(kode: string): AktivasiRecord[] {
     });
 }
 
-function getUsersByKode(kode: string): MobileUser[] {
-  return mobileUsers.filter((u) => u.customerKode === kode);
+function getUsersByKode(kode: string, users: MobileUser[]): MobileUser[] {
+  return users.filter((u) => u.customerKode === kode);
 }
 
 // ─── Searchable Dropdown Component ─────────────────────────────────────────
@@ -157,31 +157,37 @@ function SearchableSelect({
   );
 }
 
-// ─── Tambah Aktivasi Popup ─────────────────────────────────────────────────
-function TambahAktivasiPopup({
+// ─── Tambah/Edit Aktivasi Popup ─────────────────────────────────────────────────
+function AktivasiFormPopup({
   customer,
+  record,
   onClose,
   onSave,
+  onDelete,
 }: {
   customer: Customer;
+  record?: AktivasiRecord;
   onClose: () => void;
   onSave: (r: AktivasiRecord) => void;
+  onDelete?: (id: number) => void;
 }) {
-  const [tglAktif, setTglAktif] = useState("");
-  const [tglNonAktif, setTglNonAktif] = useState("");
-  const [keterangan, setKeterangan] = useState("");
+  const isEdit = !!record;
+  const [tglAktif, setTglAktif] = useState(record?.tglAktif ?? "");
+  const [tglNonAktif, setTglNonAktif] = useState(record?.tglNonAktif ?? "");
+  const [keterangan, setKeterangan] = useState(record?.keterangan ?? "");
   const [confirmMsg, setConfirmMsg] = useState("");
   const [pending, setPending] = useState<AktivasiRecord | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   function handleSimpan() {
     if (!tglAktif) return;
     const rec: AktivasiRecord = {
-      id: Date.now(),
+      id: record?.id ?? Date.now(),
       customerKode: customer.kode,
       tglAktif,
       tglNonAktif,
-      durasi: "-",
-      admin: "MM",
+      durasi: record?.durasi ?? "-",
+      admin: record?.admin ?? "MM",
       keterangan,
     };
     if (tglNonAktif && !isEndOfMonth(tglNonAktif)) {
@@ -201,11 +207,18 @@ function TambahAktivasiPopup({
     onClose();
   }
 
+  function handleDelete() {
+    if (record && onDelete) {
+      onDelete(record.id);
+      onClose();
+    }
+  }
+
   return (
     <div className="win-dialog-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="win-dialog" style={{ width: 460 }}>
         <div className="win-dialog-titlebar">
-          <span>Tambah Aktivasi — {customer.kode}</span>
+          <span>{isEdit ? "Edit" : "Tambah"} Aktivasi — {customer.kode}</span>
           <button className="win-dialog-close" onClick={onClose}>✕</button>
         </div>
         <div className="win-dialog-body">
@@ -233,37 +246,68 @@ function TambahAktivasiPopup({
           )}
         </div>
         <div className="win-dialog-footer">
-          <button className="win-btn primary" onClick={handleSimpan}>+ Simpan Aktivasi</button>
+          {isEdit && onDelete && (
+            <button className="win-btn" style={{ background: "#DC2626", color: "#fff", marginRight: "auto" }} onClick={() => setShowDeleteConfirm(true)}>
+              🗑️ Hapus
+            </button>
+          )}
+          <button className="win-btn primary" onClick={handleSimpan}>💾 {isEdit ? "Update" : "Simpan"} Aktivasi</button>
           <button className="win-btn" onClick={onClose}>Batal</button>
         </div>
       </div>
+
+      {/* Delete Confirmation */}
+      {showDeleteConfirm && (
+        <div className="win-dialog-overlay" style={{ zIndex: 60 }}>
+          <div className="win-dialog" style={{ width: 380 }}>
+            <div className="win-dialog-titlebar">
+              <span>Konfirmasi Hapus</span>
+              <button className="win-dialog-close" onClick={() => setShowDeleteConfirm(false)}>✕</button>
+            </div>
+            <div className="win-dialog-body">
+              <p style={{ fontSize: 13, margin: 0 }}>Apakah Anda yakin ingin menghapus data aktivasi ini?</p>
+              <p style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>Tindakan ini tidak dapat dibatalkan.</p>
+            </div>
+            <div className="win-dialog-footer">
+              <button className="win-btn" style={{ background: "#DC2626", color: "#fff" }} onClick={handleDelete}>Ya, Hapus</button>
+              <button className="win-btn" onClick={() => setShowDeleteConfirm(false)}>Batal</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── Tambah User Popup ─────────────────────────────────────────────────────
-function TambahUserPopup({
+// ─── Tambah/Edit User Popup ─────────────────────────────────────────────────────
+function UserFormPopup({
   customer,
+  user,
   onClose,
   onSave,
+  onDelete,
 }: {
   customer: Customer;
+  user?: MobileUser;
   onClose: () => void;
   onSave: (u: MobileUser) => void;
+  onDelete?: (id: number) => void;
 }) {
+  const isEdit = !!user;
   const [form, setForm] = useState<Partial<MobileUser>>({
     customerKode: customer.kode,
-    username: "",
-    nama: "",
-    role: "Owner",
-    status: true,
-    password: "",
+    username: user?.username ?? "",
+    nama: user?.nama ?? "",
+    role: user?.role ?? "Owner",
+    status: user?.status ?? true,
+    password: user?.password ?? "",
   });
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   function handleSave() {
     if (!form.username || !form.nama || !form.password) return;
     onSave({
-      id: Date.now(),
+      id: user?.id ?? Date.now(),
       customerKode: customer.kode,
       username: form.username,
       nama: form.nama,
@@ -274,11 +318,18 @@ function TambahUserPopup({
     onClose();
   }
 
+  function handleDelete() {
+    if (user && onDelete) {
+      onDelete(user.id);
+      onClose();
+    }
+  }
+
   return (
     <div className="win-dialog-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="win-dialog" style={{ width: 420 }}>
         <div className="win-dialog-titlebar">
-          <span>Tambah User — {customer.kode}</span>
+          <span>{isEdit ? "Edit" : "Tambah"} User — {customer.kode}</span>
           <button className="win-dialog-close" onClick={onClose}>✕</button>
         </div>
         <div className="win-dialog-body">
@@ -309,10 +360,35 @@ function TambahUserPopup({
           </div>
         </div>
         <div className="win-dialog-footer">
-          <button className="win-btn primary" onClick={handleSave}>💾 Simpan</button>
+          {isEdit && onDelete && (
+            <button className="win-btn" style={{ background: "#DC2626", color: "#fff", marginRight: "auto" }} onClick={() => setShowDeleteConfirm(true)}>
+              🗑️ Hapus
+            </button>
+          )}
+          <button className="win-btn primary" onClick={handleSave}>💾 {isEdit ? "Update" : "Simpan"}</button>
           <button className="win-btn" onClick={onClose}>Batal</button>
         </div>
       </div>
+
+      {/* Delete Confirmation */}
+      {showDeleteConfirm && (
+        <div className="win-dialog-overlay" style={{ zIndex: 60 }}>
+          <div className="win-dialog" style={{ width: 380 }}>
+            <div className="win-dialog-titlebar">
+              <span>Konfirmasi Hapus</span>
+              <button className="win-dialog-close" onClick={() => setShowDeleteConfirm(false)}>✕</button>
+            </div>
+            <div className="win-dialog-body">
+              <p style={{ fontSize: 13, margin: 0 }}>Apakah Anda yakin ingin menghapus user <strong>{form.username}</strong>?</p>
+              <p style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>Tindakan ini tidak dapat dibatalkan.</p>
+            </div>
+            <div className="win-dialog-footer">
+              <button className="win-btn" style={{ background: "#DC2626", color: "#fff" }} onClick={handleDelete}>Ya, Hapus</button>
+              <button className="win-btn" onClick={() => setShowDeleteConfirm(false)}>Batal</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -320,57 +396,97 @@ function TambahUserPopup({
 // ─── Detail Riwayat Aktivasi Popup ─────────────────────────────────────────
 function RiwayatAktivasiPopup({
   customer,
+  records,
   history,
   onClose,
+  onEdit,
+  onDelete,
 }: {
   customer: Customer;
+  records: AktivasiRecord[];
   history: AktivasiRecord[];
   onClose: () => void;
+  onEdit: (record: AktivasiRecord) => void;
+  onDelete: (id: number) => void;
 }) {
+  const [editRecord, setEditRecord] = useState<AktivasiRecord | null>(null);
+
+  function handleEditFromHistory(record: AktivasiRecord) {
+    setEditRecord(record);
+  }
+
+  function handleSaveEdit(record: AktivasiRecord) {
+    onEdit(record);
+    setEditRecord(null);
+  }
+
   return (
-    <div className="win-dialog-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="win-dialog" style={{ width: 700 }}>
-        <div className="win-dialog-titlebar">
-          <span>Riwayat Aktivasi — {customer.kode} {customer.nama}</span>
-          <button className="win-dialog-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="win-dialog-body" style={{ maxHeight: 400, overflow: "auto" }}>
-          {history.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 24, color: "#9CA3AF" }}>Belum ada riwayat aktivasi</div>
-          ) : (
-            <table className="win-grid">
-              <thead>
-                <tr>
-                  <th style={{ minWidth: 36, textAlign: "center" }}>No</th>
-                  <th style={{ minWidth: 90, textAlign: "center" }}>Tgl Aktif</th>
-                  <th style={{ minWidth: 90, textAlign: "center" }}>Tgl Non-Aktif</th>
-                  <th style={{ minWidth: 70, textAlign: "center" }}>Durasi</th>
-                  <th style={{ minWidth: 50, textAlign: "center" }}>Admin</th>
-                  <th style={{ minWidth: 160 }}>Keterangan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((r, i) => (
-                  <tr key={r.id}>
-                    <td style={{ textAlign: "center" }}>{i + 1}</td>
-                    <td style={{ textAlign: "center", color: "#16a34a" }}>{r.tglAktif}</td>
-                    <td style={{ textAlign: "center", color: r.tglNonAktif ? "#DC2626" : "#9CA3AF" }}>
-                      {r.tglNonAktif || "Aktif"}
-                    </td>
-                    <td style={{ textAlign: "center" }}>{r.durasi}</td>
-                    <td style={{ textAlign: "center" }}>{r.admin}</td>
-                    <td>{r.keterangan}</td>
+    <>
+      <div className="win-dialog-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="win-dialog" style={{ width: 800 }}>
+          <div className="win-dialog-titlebar">
+            <span>Riwayat Aktivasi — {customer.kode} {customer.nama}</span>
+            <button className="win-dialog-close" onClick={onClose}>✕</button>
+          </div>
+          <div className="win-dialog-body" style={{ maxHeight: 400, overflow: "auto" }}>
+            {history.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 24, color: "#9CA3AF" }}>Belum ada riwayat aktivasi</div>
+            ) : (
+              <table className="win-grid">
+                <thead>
+                  <tr>
+                    <th style={{ minWidth: 36, textAlign: "center" }}>No</th>
+                    <th style={{ minWidth: 90, textAlign: "center" }}>Tgl Aktif</th>
+                    <th style={{ minWidth: 90, textAlign: "center" }}>Tgl Non-Aktif</th>
+                    <th style={{ minWidth: 70, textAlign: "center" }}>Durasi</th>
+                    <th style={{ minWidth: 50, textAlign: "center" }}>Admin</th>
+                    <th style={{ minWidth: 140 }}>Keterangan</th>
+                    <th style={{ minWidth: 100, textAlign: "center" }}>Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-        <div className="win-dialog-footer">
-          <button className="win-btn" onClick={onClose}>Tutup</button>
+                </thead>
+                <tbody>
+                  {history.map((r, i) => (
+                    <tr key={r.id}>
+                      <td style={{ textAlign: "center" }}>{i + 1}</td>
+                      <td style={{ textAlign: "center", color: "#16a34a" }}>{r.tglAktif}</td>
+                      <td style={{ textAlign: "center", color: r.tglNonAktif ? "#DC2626" : "#9CA3AF" }}>
+                        {r.tglNonAktif || "Aktif"}
+                      </td>
+                      <td style={{ textAlign: "center" }}>{r.durasi}</td>
+                      <td style={{ textAlign: "center" }}>{r.admin}</td>
+                      <td>{r.keterangan}</td>
+                      <td style={{ textAlign: "center" }}>
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                          <button className="win-btn" style={{ fontSize: 10, padding: "2px 8px" }} onClick={() => handleEditFromHistory(r)}>
+                            ✏️ Edit
+                          </button>
+                          <button className="win-btn" style={{ fontSize: 10, padding: "2px 8px", background: "#FEE2E2", color: "#DC2626" }} onClick={() => onDelete(r.id)}>
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <div className="win-dialog-footer">
+            <button className="win-btn" onClick={onClose}>Tutup</button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {editRecord && (
+        <AktivasiFormPopup
+          customer={customer}
+          record={editRecord}
+          onClose={() => setEditRecord(null)}
+          onSave={handleSaveEdit}
+          onDelete={onDelete}
+        />
+      )}
+    </>
   );
 }
 
@@ -379,71 +495,125 @@ function DetailUserPopup({
   customer,
   users,
   onClose,
+  onEdit,
+  onDelete,
+  onAdd,
 }: {
   customer: Customer;
   users: MobileUser[];
   onClose: () => void;
+  onEdit: (user: MobileUser) => void;
+  onDelete: (id: number) => void;
+  onAdd: (user: MobileUser) => void;
 }) {
   const [showPw, setShowPw] = useState<Record<number, boolean>>({});
+  const [editUser, setEditUser] = useState<MobileUser | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
-  function toggleUserStatusLocal(id: number) {
-    // ephemeral only in popup; parent state sync would require lift
-    // for demo, we keep it read-only in popup or we can mutate a local copy
+  function handleEdit(user: MobileUser) {
+    setEditUser(user);
+  }
+
+  function handleSaveEdit(user: MobileUser) {
+    onEdit(user);
+    setEditUser(null);
+  }
+
+  function handleAddNew() {
+    setShowAddForm(true);
+  }
+
+  function handleSaveAdd(user: MobileUser) {
+    onAdd(user);
+    setShowAddForm(false);
   }
 
   return (
-    <div className="win-dialog-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="win-dialog" style={{ width: 680 }}>
-        <div className="win-dialog-titlebar">
-          <span>Manajemen User — {customer.kode} {customer.nama}</span>
-          <button className="win-dialog-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="win-dialog-body" style={{ maxHeight: 400, overflow: "auto" }}>
-          {users.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 24, color: "#9CA3AF" }}>Belum ada user mobile</div>
-          ) : (
-            <table className="win-grid">
-              <thead>
-                <tr>
-                  <th style={{ minWidth: 36, textAlign: "center" }}>No</th>
-                  <th style={{ minWidth: 140 }}>Username</th>
-                  <th style={{ minWidth: 180 }}>Nama</th>
-                  <th style={{ minWidth: 80, textAlign: "center" }}>Role</th>
-                  <th style={{ minWidth: 70, textAlign: "center" }}>Status</th>
-                  <th style={{ minWidth: 90, textAlign: "center" }}>Password</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u, i) => (
-                  <tr key={u.id}>
-                    <td style={{ textAlign: "center" }}>{i + 1}</td>
-                    <td style={{ fontFamily: "monospace" }}>{u.username}</td>
-                    <td>{u.nama}</td>
-                    <td style={{ textAlign: "center" }}>
-                      <span className={u.role === "Owner" ? "badge badge-owner" : "badge badge-apoteker"}>{u.role}</span>
-                    </td>
-                    <td style={{ textAlign: "center" }}>
-                      <span className={u.status ? "badge badge-lunas" : "badge badge-belum"}>{u.status ? "Aktif" : "Non-aktif"}</span>
-                    </td>
-                    <td style={{ fontFamily: "monospace", letterSpacing: 2, textAlign: "center" }}>
-                      <span style={{ cursor: "pointer", userSelect: "none" }} onClick={() => setShowPw((p) => ({ ...p, [u.id]: !p[u.id] }))} title="Klik untuk lihat/sembunyikan">
-                        {showPw[u.id] ? u.password : "••••••••"}
-                      </span>
-                    </td>
+    <>
+      <div className="win-dialog-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="win-dialog" style={{ width: 780 }}>
+          <div className="win-dialog-titlebar">
+            <span>Manajemen User — {customer.kode} {customer.nama}</span>
+            <button className="win-dialog-close" onClick={onClose}>✕</button>
+          </div>
+          <div className="win-dialog-body" style={{ maxHeight: 400, overflow: "auto" }}>
+            {users.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 24, color: "#9CA3AF" }}>Belum ada user mobile</div>
+            ) : (
+              <table className="win-grid">
+                <thead>
+                  <tr>
+                    <th style={{ minWidth: 36, textAlign: "center" }}>No</th>
+                    <th style={{ minWidth: 140 }}>Username</th>
+                    <th style={{ minWidth: 180 }}>Nama</th>
+                    <th style={{ minWidth: 80, textAlign: "center" }}>Role</th>
+                    <th style={{ minWidth: 70, textAlign: "center" }}>Status</th>
+                    <th style={{ minWidth: 90, textAlign: "center" }}>Password</th>
+                    <th style={{ minWidth: 100, textAlign: "center" }}>Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <div style={{ marginTop: 8, fontSize: 10, color: "#6B7280", padding: "4px 0" }}>
-            * Semua akun dibuat oleh admin PBF. Tidak ada self-register dari apotek.
+                </thead>
+                <tbody>
+                  {users.map((u, i) => (
+                    <tr key={u.id}>
+                      <td style={{ textAlign: "center" }}>{i + 1}</td>
+                      <td style={{ fontFamily: "monospace" }}>{u.username}</td>
+                      <td>{u.nama}</td>
+                      <td style={{ textAlign: "center" }}>
+                        <span className={u.role === "Owner" ? "badge badge-owner" : "badge badge-apoteker"}>{u.role}</span>
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <span className={u.status ? "badge badge-lunas" : "badge badge-belum"}>{u.status ? "Aktif" : "Non-aktif"}</span>
+                      </td>
+                      <td style={{ fontFamily: "monospace", letterSpacing: 2, textAlign: "center" }}>
+                        <span style={{ cursor: "pointer", userSelect: "none" }} onClick={() => setShowPw((p) => ({ ...p, [u.id]: !p[u.id] }))} title="Klik untuk lihat/sembunyikan">
+                          {showPw[u.id] ? u.password : "••••••••"}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
+                          <button className="win-btn" style={{ fontSize: 10, padding: "2px 8px" }} onClick={() => handleEdit(u)}>
+                            ✏️ Edit
+                          </button>
+                          <button className="win-btn" style={{ fontSize: 10, padding: "2px 8px", background: "#FEE2E2", color: "#DC2626" }} onClick={() => onDelete(u.id)}>
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <div style={{ marginTop: 8, fontSize: 10, color: "#6B7280", padding: "4px 0" }}>
+              * Semua akun dibuat oleh admin PBF. Tidak ada self-register dari apotek.
+            </div>
+          </div>
+          <div className="win-dialog-footer">
+            <button className="win-btn primary" onClick={handleAddNew}>➕ Tambah User Baru</button>
+            <div style={{ flex: 1 }} />
+            <button className="win-btn" onClick={onClose}>Tutup</button>
           </div>
         </div>
-        <div className="win-dialog-footer">
-          <button className="win-btn" onClick={onClose}>Tutup</button>
-        </div>
       </div>
-    </div>
+
+      {editUser && (
+        <UserFormPopup
+          customer={customer}
+          user={editUser}
+          onClose={() => setEditUser(null)}
+          onSave={handleSaveEdit}
+          onDelete={onDelete}
+        />
+      )}
+
+      {showAddForm && (
+        <UserFormPopup
+          customer={customer}
+          onClose={() => setShowAddForm(false)}
+          onSave={handleSaveAdd}
+        />
+      )}
+    </>
   );
 }
 
@@ -456,7 +626,7 @@ function AktivasiContent() {
   const [tab, setTab] = useState<Tab>("Aktivasi");
   const [selectedKode, setSelectedKode] = useState<string>(initKode);
   const [aktivasiData, setAktivasiData] = useState<AktivasiRecord[]>(aktivasiRecords);
-  const [userData] = useState<MobileUser[]>(mobileUsers); // read-only for grid summary
+  const [userData, setUserData] = useState<MobileUser[]>(mobileUsers);
 
   const [detailAktivasi, setDetailAktivasi] = useState<Customer | null>(null);
   const [detailUser, setDetailUser] = useState<Customer | null>(null);
@@ -475,26 +645,48 @@ function AktivasiContent() {
     let list = customers;
     if (selectedKode) list = list.filter((c) => c.kode === selectedKode);
     return list.map((c) => {
-      const latest = getLatestAktivasi(c.kode);
-      const total = getAktivasiHistory(c.kode).length;
+      const latest = getLatestAktivasi(c.kode, aktivasiData);
+      const total = getAktivasiHistory(c.kode, aktivasiData).length;
       return { customer: c, latest, total };
     });
-  }, [selectedKode]);
+  }, [selectedKode, aktivasiData]);
 
   // User rows = 1 row per apotek (summary)
   const userRows = useMemo(() => {
     let list = customers;
     if (selectedKode) list = list.filter((c) => c.kode === selectedKode);
     return list.map((c) => {
-      const users = getUsersByKode(c.kode);
+      const users = getUsersByKode(c.kode, userData);
       const owner = users.find((u) => u.role === "Owner");
       const apoteker = users.find((u) => u.role === "Apoteker");
       return { customer: c, users, owner, apoteker, total: users.length };
     });
-  }, [selectedKode]);
+  }, [selectedKode, userData]);
 
+  // ─── CRUD Handlers for Aktivasi ───
   function handleAddAktivasi(rec: AktivasiRecord) {
     setAktivasiData((prev) => [...prev, rec]);
+  }
+
+  function handleEditAktivasi(rec: AktivasiRecord) {
+    setAktivasiData((prev) => prev.map((r) => (r.id === rec.id ? rec : r)));
+  }
+
+  function handleDeleteAktivasi(id: number) {
+    setAktivasiData((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  // ─── CRUD Handlers for User ───
+  function handleAddUser(user: MobileUser) {
+    setUserData((prev) => [...prev, user]);
+  }
+
+  function handleEditUser(user: MobileUser) {
+    setUserData((prev) => prev.map((u) => (u.id === user.id ? user : u)));
+  }
+
+  function handleDeleteUser(id: number) {
+    setUserData((prev) => prev.filter((u) => u.id !== id));
   }
 
   return (
@@ -572,7 +764,7 @@ function AktivasiContent() {
                 <th style={{ minWidth: 70, textAlign: "center" }}>Durasi</th>
                 <th style={{ minWidth: 80, textAlign: "center" }}>Status</th>
                 <th style={{ minWidth: 60, textAlign: "center" }}>Jml Riwayat</th>
-                <th style={{ minWidth: 100, textAlign: "center" }}>Aksi</th>
+                <th style={{ minWidth: 120, textAlign: "center" }}>Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -638,7 +830,7 @@ function AktivasiContent() {
                 <th style={{ minWidth: 160 }}>Owner</th>
                 <th style={{ minWidth: 160 }}>Apoteker</th>
                 <th style={{ minWidth: 80, textAlign: "center" }}>Status Cust</th>
-                <th style={{ minWidth: 100, textAlign: "center" }}>Aksi</th>
+                <th style={{ minWidth: 120, textAlign: "center" }}>Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -707,29 +899,35 @@ function AktivasiContent() {
       {detailAktivasi && (
         <RiwayatAktivasiPopup
           customer={detailAktivasi}
-          history={getAktivasiHistory(detailAktivasi.kode)}
+          records={aktivasiData}
+          history={getAktivasiHistory(detailAktivasi.kode, aktivasiData)}
           onClose={() => setDetailAktivasi(null)}
+          onEdit={handleEditAktivasi}
+          onDelete={handleDeleteAktivasi}
         />
       )}
       {detailUser && (
         <DetailUserPopup
           customer={detailUser}
-          users={getUsersByKode(detailUser.kode)}
+          users={getUsersByKode(detailUser.kode, userData)}
           onClose={() => setDetailUser(null)}
+          onEdit={handleEditUser}
+          onDelete={handleDeleteUser}
+          onAdd={handleAddUser}
         />
       )}
       {addAktivasiTarget && (
-        <TambahAktivasiPopup
+        <AktivasiFormPopup
           customer={addAktivasiTarget}
           onClose={() => setAddAktivasiTarget(null)}
           onSave={handleAddAktivasi}
         />
       )}
       {addUserTarget && (
-        <TambahUserPopup
+        <UserFormPopup
           customer={addUserTarget}
           onClose={() => setAddUserTarget(null)}
-          onSave={(u) => {/* local add only, dummy-data is source of truth for grid */}}
+          onSave={handleAddUser}
         />
       )}
     </div>
